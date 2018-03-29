@@ -9,6 +9,10 @@ import scrapy
 
 
 class MmonlyCcItem(scrapy.Item):
-    # define the fields for your item here like:
-    # name = scrapy.Field()
-    pass
+    title = scrapy.Field()
+    image_urls = scrapy.Field()
+    images = scrapy.Field()
+    source_url = scrapy.Field()
+    category = scrapy.Field()
+    created_at = scrapy.Field()
+    updated_at = scrapy.Field()

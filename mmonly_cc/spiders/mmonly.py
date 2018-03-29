@@ -1,53 +1,52 @@
 # -*- coding: utf-8 -*-
 
-import scrapy
-from scrapy import Request
+from scrapy.linkextractors import LinkExtractor
+from scrapy.spiders import CrawlSpider, Rule
+
+from mmonly_cc.items import MmonlyCcItem
+
+import re
+import datetime
 
 
-class MmonlySpider(scrapy.Spider):
-    name = 'mmonly.cc'
+class MmonlySpider(CrawlSpider):
+    name = 'mmonly'
+    allowed_domains = ['mmonly.cc']
+    start_urls = ['http://mmonly.cc/mmtp/']
+    rules = [
+        Rule(link_extractor=LinkExtractor(allow='.*/mmtp/.*/\d+(_\d+)?\.html'), callback='parse_item'),
+        Rule(link_extractor=LinkExtractor(allow='.*/mmtp/.*/(list_\d+_\d+\.html)?'))
+    ]
 
-    categories = ['bjnmn', 'ctmn', 'hgmn', 'mnmx', 'nymn', 'qcmn', 'swmn', 'wgmv', 'xgmn']
+    def parse_item(self, response):
+        title_tags = response.css('div.imgtitle h1')
 
-    def start_requests(self):
-        for category in self.categories:
-            yield Request(url='http://mmonly.cc/mmtp/%s/' % (category), callback=self.parse_category_list)
+        if not title_tags:
+            return
 
-    def parse_category_list(self, response):
-        list_item_tags = response.css('div.item_list > div.item div.ABox a')
-        for list_item_tag in list_item_tags:
-            list_items_src = list_item_tag.css('::attr(href)').extract_first()
-            if not list_items_src:
-                continue
-            list_items_src = response.urljoin(list_items_src)
-            yield Request(url=list_items_src, callback=self.parse_category_list_item)
+        title_tag = title_tags[0]
+        title = title_tag.css('::text').extract_first()
+        title = re.sub('\(\d+/\d+\)$', '', title)
 
-        pagination_tags = response.css('div#pageNum a')
-        for pagination_tag in pagination_tags:
-            page_src = pagination_tag.css('::attr(href)').extract_first()
-            if not page_src:
-                continue
-            page_src = response.urljoin(page_src)
-            yield Request(url=page_src, callback=self.parse_category_list)
+        image_tags = response.css('#big-pic img')
 
-    def parse_category_list_item(self, response):
-        image_tags = response.css('div#big-pic img')
-        for image_tag in image_tags:
-            image_src = image_tag.css('::attr(src)').extract_first()
-            image_title = image_tag.css('::attr(alt)').extract_first()
-            source_url = response.url
-            if not image_src or not image_title:
-                continue
-            yield {
-                'image_urls': [image_src],
-                'image_title': image_title,
-                'source_url': source_url
-            }
+        if not image_tags:
+            return
 
-        pagination_tags = response.css('div.pages > ul > li > a')
-        for pagination_tag in pagination_tags:
-            page_src = pagination_tag.css('::attr(href)').extract_first()
-            if not page_src:
-                continue
-            page_src = response.urljoin(page_src)
-            yield Request(url=page_src, callback=self.parse_category_list_item)
+        image_tag = image_tags[0]
+
+        image_url = image_tag.css('::attr(src)').extract_first()
+        image_url = response.urljoin(image_url)
+
+        matcher = re.match(ur'.*/mmtp/(?P<category>\w+)/.*', response.url)
+        category = matcher.group('category') if matcher else ''
+
+        mmonly_cc_item = MmonlyCcItem(
+            title=title,
+            image_urls=[image_url],
+            source_url=response.url,
+            category=category,
+            updated_at=datetime.datetime.now()
+        )
+
+        yield mmonly_cc_item
